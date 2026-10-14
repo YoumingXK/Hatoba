@@ -53,6 +53,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?star=due
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
+ *   ?agent=off                              (no ssh-agent at all, SSH-09)
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
@@ -92,6 +93,7 @@ export function createMockApi(): HatobaApi {
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
   let closeDemo = q.get("close") === "prompt";
+  const agentDemo = q.get("agent");
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
   const BUNDLED_WORKER = "0.2.0";
@@ -1088,6 +1090,20 @@ export function createMockApi(): HatobaApi {
     prefs_save: async (next) => {
       prefs = next;
       localStorage.setItem("hatoba.mock.prefs", JSON.stringify(next));
+    },
+    // SSH-09: the sample device's Bitwarden agent, the chosen socket, or no agent with `?agent=off`.
+    ssh_agent_status: async () => {
+      if (agentDemo === "off") return structuredClone(D.SSH_AGENT_NONE);
+      const chosen = prefs.ssh_agent_socket;
+      if (chosen && chosen !== D.SSH_AGENT.socket) {
+        // A path that is not the agent of this device, as the real backend reports it.
+        return {
+          ...structuredClone(D.SSH_AGENT_NONE),
+          error: `no ssh-agent answered at ${chosen}: No such file or directory (os error 2)`,
+        };
+      }
+      const sample = structuredClone(D.SSH_AGENT);
+      return chosen ? { ...sample, socket: chosen } : sample;
     },
     star_prompt_get: async () => ({ ...starPrompt }),
     star_prompt_done: async () => {
