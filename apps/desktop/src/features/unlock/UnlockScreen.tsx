@@ -82,9 +82,21 @@ export function UnlockScreen() {
   };
 
   const fail = useCallback(
-    async (e: unknown) => {
+    async (e: unknown, byItself = false) => {
       const err = toAppError(e);
       if (err.code === "cancelled") return;
+      // SEC-10: with the lid shut the prompt the app raises on its own is refused at once, and a
+      // record this Mac can never open is refused every time. Neither is worth a red line on every
+      // unlock: they show when the button was clicked, and the request was deliberate then.
+      if (byItself && (err.code === "biometric_unavailable" || err.code === "biometric_stale")) return;
+      // A record this Mac cannot open any more — the vault came from another Mac — is not a wrong
+      // password: the field asks for the master password, and the message says Touch ID has to be
+      // turned on again.
+      if (err.code === "biometric_stale") {
+        setUsePassword(true);
+        setPassword("");
+        void useApp.getState().refreshVault().catch(() => null);
+      }
       // The PIN no longer unlocks (too many wrong ones, or the app restarted): the field asks for
       // the master password, under the reason.
       if (err.code === "pin_unavailable" || (err.code === "wrong_pin" && !err.attempts_left)) {
@@ -122,7 +134,7 @@ export function UnlockScreen() {
     }
   };
 
-  const unlockBiometric = async () => {
+  const unlockBiometric = async (byItself = false) => {
     setBusy(true);
     setError(null);
     try {
@@ -130,7 +142,7 @@ export function UnlockScreen() {
       await enterUnlocked();
     } catch (err) {
       setBusy(false);
-      await fail(err);
+      await fail(err, byItself);
     }
   };
 
@@ -143,7 +155,7 @@ export function UnlockScreen() {
   autoPrompt.current = () => {
     if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible") return;
     prompted.current = true;
-    void unlockBiometric();
+    void unlockBiometric(true);
   };
   const biometricOn = !!vault?.biometric_enabled;
   useEffect(() => {

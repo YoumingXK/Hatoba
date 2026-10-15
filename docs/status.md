@@ -17,7 +17,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | 🟡 | Needs verification on a real Windows machine |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | 🟡 | Verified on a real Mac (enrolment, the lock screen, and the record's mode); not on a Developer ID build |
+| SEC-10 | Touch ID | 🟡 | Tried by hand on one Mac (M-series, macOS 27, ad-hoc signed): turning the switch on draws the system's own sheet and keeps a 0600 record beside the vault database, and a click on the lock screen's button opens it. Not verified yet, item by item: macOS 13; a Mac without Touch ID, where the switch must not appear; turning Touch ID on again after the enrolled fingerprints change; unlocking after an app update, since every ad-hoc build has a new cdhash; and a vault that came over with Migration Assistant, whose record cannot work on the new Mac. Not tried on a Developer ID build, which moves to the keychain design anyway |
 | SEC-11 | PIN unlock | 🟡 | Keeping the PIN after a restart needs verification with the credential store on each platform |
 
 ## SSH, terminal, SFTP, and forwarding (§7)

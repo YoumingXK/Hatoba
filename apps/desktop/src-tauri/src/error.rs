@@ -23,6 +23,12 @@ pub enum ErrorCode {
     /// platforms would call it dead code.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     BiometricUnavailable,
+    /// SEC-07, SEC-10: the saved biometric unlock cannot be opened any more — it was written by
+    /// another build, it is damaged, or it came from another Mac along with the vault (Migration
+    /// Assistant). Nothing the user typed was wrong, so it must not be reported as a wrong
+    /// password: the master password unlocks, and the biometric has to be turned on again.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    BiometricStale,
     NotFound,
     InvalidInput,
     KeyParse,
