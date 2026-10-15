@@ -262,9 +262,16 @@ mod imp {
     /// `errSecAuthFailed` and `errSecInteractionNotAllowed`: the user was not confirmed.
     const ERR_AUTH_FAILED: isize = -25293;
     const ERR_INTERACTION_NOT_ALLOWED: isize = -25308;
-    /// What a sheet that cannot be presented at all reports, and what this Mac answers with in a
-    /// process that has no window to put it in.
-    const ERR_UNIMPLEMENTED: isize = -4;
+    /// `LAError.systemCancel`: the system refused to ask at all. A Mac in clamshell mode answers
+    /// exactly this (`Touch ID is not available in closed clamshell mode`), and so does a sheet the
+    /// system took away.
+    const ERR_SYSTEM_CANCEL: isize = -4;
+    /// `LAError.userCancel`: the user dismissed the sheet.
+    const ERR_USER_CANCEL: isize = -2;
+    /// `LAError.biometryNotAvailable` and `biometryNotEnrolled`: no sensor to read, or no finger on
+    /// it.
+    const ERR_BIOMETRY_NOT_AVAILABLE: isize = -6;
+    const ERR_BIOMETRY_NOT_ENROLLED: isize = -7;
 
     /// Whether this Mac can do it at all: Touch ID is there, so a Mac without one hides the switch,
     /// as a machine without Windows Hello does on Windows.
@@ -552,11 +559,19 @@ mod imp {
     /// What a refused exchange means to the user.
     fn exchange_error(error: &core_foundation::error::CFError) -> AppError {
         match error.code() {
-            ERR_USER_CANCELED | ERR_UNIMPLEMENTED => {
+            ERR_USER_CANCELED | ERR_USER_CANCEL => {
                 AppError::new(ErrorCode::Cancelled, "Touch ID was cancelled")
             }
             ERR_AUTH_FAILED | ERR_INTERACTION_NOT_ALLOWED => {
                 AppError::new(ErrorCode::Cancelled, "Touch ID was not confirmed")
+            }
+            // Not a cancellation by the user, and not a damaged record either: the sheet could not
+            // be put up at all. The framework says why, and it is worth keeping: with the lid shut
+            // this is `Touch ID is not available in closed clamshell mode`.
+            ERR_SYSTEM_CANCEL | ERR_BIOMETRY_NOT_AVAILABLE | ERR_BIOMETRY_NOT_ENROLLED => {
+                let reason = error.description().to_string();
+                tracing::warn!("Touch ID is not available now: {reason}");
+                AppError::new(ErrorCode::BiometricUnavailable, reason)
             }
             code => AppError::new(
                 ErrorCode::Internal,
@@ -761,9 +776,9 @@ mod imp {
 
         /// The claim the record rests on, on a machine with a Secure Enclave: a key restored from
         /// the blob is the same key, so the file brings back what it sealed. Gated, because it
-        /// needs real hardware, and it restores *without* the control on purpose: a process without
-        /// a window cannot answer the sheet, and that a key restored *with* the control then needs
-        /// Touch ID is what a person verifies from the app.
+        /// needs real hardware, and it restores *without* the control on purpose: an exchange that
+        /// asks for Touch ID cannot be answered from a terminal that nobody is touching, so the
+        /// restored key's sheet is what a person verifies from the app.
         ///
         /// `HATOBA_TOUCH_ID_IT=1 cargo test -p hatoba-desktop the_enclave_blob`
         #[test]
@@ -792,10 +807,10 @@ mod imp {
                 "the restored key is not the key that was made"
             );
 
-            // The exchange is what the sheet is for. Where one can be presented, this also proves
-            // the wrapping key is the same; where it cannot (a process without a window reports
-            // `-4`, the sheet it could not put up), the refusal has to be Touch ID's, never a
-            // damaged record's.
+            // The exchange is what the sheet is for. Where it can be answered, this also proves
+            // the wrapping key is the same; where it cannot — nobody is touching the sensor, the
+            // lid is shut, the run has no one at the keyboard — the refusal has to be Touch ID's,
+            // never a damaged record's.
             let peer = ephemeral_key().unwrap();
             let peer_public = public_key(&peer).unwrap();
             match wrap_key(&restored, &peer_public) {
