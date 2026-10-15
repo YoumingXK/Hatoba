@@ -55,6 +55,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?biometric=unavailable | cancelled     (the biometric unlock refuses, as a Mac with its
+ *                                           lid shut does)
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -117,6 +119,8 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  /** SEC-07, SEC-10: how the biometric unlock answers, for the states a Mac cannot show. */
+  const biometricRefusal = q.get("biometric");
   const pinDemo = q.get("pin");
   const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
   /** Any full unlock arms the PIN again and resets its failures. */
@@ -317,6 +321,12 @@ export function createMockApi(): HatobaApi {
     },
     vault_unlock_biometric: async () => {
       await delay(700);
+      if (biometricRefusal === "unavailable") {
+        // What macOS answers with the lid shut: the sensor cannot be read, and the password is
+        // still there.
+        fail("biometric_unavailable", "Touch ID is not available in closed clamshell mode.");
+      }
+      if (biometricRefusal === "cancelled") fail("cancelled");
       armPin();
       vaultState = "unlocked";
     },
