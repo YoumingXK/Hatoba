@@ -11,15 +11,16 @@ pub mod files;
 pub mod search;
 
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use hatoba_ssh::local_sh::LocalSh;
-use hatoba_ssh::remote_command::{self, CommandRun};
+use hatoba_ssh::remote_command::{self, CommandRun, Stopped};
 use hatoba_ssh::remote_file::{self, Expect, RemoteDir, RemoteFile, RemoteFileError, RemoteLines};
 use hatoba_ssh::remote_search::{self, GrepQuery, RemoteSearchError, Scope, SearchOutput};
+use hatoba_ssh::session::ExecOutput;
 use hatoba_ssh::{SshError, SshErrorKind};
 
 use crate::shells::{Shell, ShellKind};
@@ -216,19 +217,69 @@ impl LocalTools {
         }
     }
 
-    /// AI-12: `command`, apart from the tab's shell. When `stop` completes first, the command and
-    /// the processes it started are ended, and the result says whether they were.
+    /// AI-12: `command`, apart from the tab's shell, in `workdir` (absolute, or from the home
+    /// directory) or the home directory. When `stop` completes first, the command and the
+    /// processes it started are ended, and the result says whether they were.
     pub async fn run_command(
         &self,
         command: &str,
+        workdir: Option<&str>,
         stop: impl std::future::Future<Output = ()>,
     ) -> Result<CommandRun, String> {
         match self {
-            Self::Sh { sh, .. } => remote_command::run_local(sh, command, stop)
+            Self::Sh { sh, .. } => remote_command::run_local(sh, command, workdir, stop)
                 .await
                 .map_err(|e| e.message),
-            Self::Native { shell, home } => command::run(shell, command, home, stop).await,
+            Self::Native { shell, home } => {
+                tokio::pin!(stop);
+                let cwd = match workdir {
+                    // A network folder can take long to answer; a stop does not wait for it.
+                    Some(dir) => tokio::select! {
+                        biased;
+                        () = &mut stop => {
+                            return Ok(CommandRun {
+                                output: ExecOutput::default(),
+                                stopped: Some(Stopped::NotStarted),
+                            });
+                        }
+                        cwd = native_workdir(shell, dir, home) => cwd?,
+                    },
+                    None => home.clone(),
+                };
+                command::run(shell, command, &cwd, stop).await
+            }
         }
+    }
+}
+
+/// The directory a Windows shell starts a command in, read as the file tools read paths, or why
+/// it cannot: for a missing one, the shell's own error would only say that it could not start.
+async fn native_workdir(shell: &NativeShell, dir: &str, home: &Path) -> Result<PathBuf, String> {
+    let path = files::resolve(dir, home);
+    // Command Prompt starts in C:\Windows instead, after a warning. A network path starts with two
+    // slashes of either kind.
+    let network = path
+        .to_string_lossy()
+        .chars()
+        .take(2)
+        .filter(|c| matches!(c, '\\' | '/'))
+        .count()
+        == 2;
+    if matches!(shell, NativeShell::Cmd(_)) && network {
+        return Err(
+            "Command Prompt cannot start in a network path: leave out workdir and use pushd in \
+             the command"
+                .to_owned(),
+        );
+    }
+    let shown = files::shown(&path);
+    match tokio::fs::metadata(&path).await {
+        Ok(meta) if meta.is_dir() => Ok(path),
+        Ok(_) => Err(format!("{shown} is not a directory")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("the directory {shown} does not exist"))
+        }
+        Err(e) => Err(format!("the directory {shown} cannot be used: {e}")),
     }
 }
 
@@ -327,7 +378,7 @@ mod tests {
         };
         let tools = LocalTools::for_shell(&shell, Vec::new());
         let run = tools
-            .run_command("pwd -P", std::future::pending())
+            .run_command("pwd -P", None, std::future::pending())
             .await
             .unwrap();
         let home = dirs::home_dir().unwrap().canonicalize().unwrap();
@@ -335,5 +386,91 @@ mod tests {
             String::from_utf8_lossy(&run.output.stdout).trim_end(),
             home.to_str().unwrap()
         );
+        let tmp = std::env::temp_dir().canonicalize().unwrap();
+        let run = tools
+            .run_command("pwd -P", tmp.to_str(), std::future::pending())
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&run.output.stdout).trim_end(),
+            tmp.to_str().unwrap()
+        );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use crate::shells;
+
+    fn shell(kind: ShellKind) -> NativeShell {
+        let found = shells::detect()
+            .into_iter()
+            .find(|s| s.kind == kind)
+            .unwrap();
+        match kind {
+            ShellKind::PowerShell => NativeShell::PowerShell(found.program),
+            ShellKind::Cmd => NativeShell::Cmd(found.program),
+            _ => unreachable!(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_command_starts_in_workdir_from_the_home_directory() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join("a b")).unwrap();
+        std::fs::write(home.path().join("file"), "").unwrap();
+        for kind in [ShellKind::PowerShell, ShellKind::Cmd] {
+            let tools = LocalTools::Native {
+                shell: shell(kind.clone()),
+                home: home.path().to_path_buf(),
+            };
+            let line = if kind == ShellKind::Cmd {
+                "cd"
+            } else {
+                "(Get-Location).Path"
+            };
+            for dir in ["a b", "~/a b"] {
+                let run = tools
+                    .run_command(line, Some(dir), std::future::pending())
+                    .await
+                    .unwrap();
+                let printed = String::from_utf8_lossy(&run.output.stdout);
+                // A temporary folder may be named in 8.3 form (RUNNER~1), which PowerShell prints
+                // in full.
+                assert_eq!(
+                    std::fs::canonicalize(printed.trim_end()).unwrap(),
+                    std::fs::canonicalize(home.path().join("a b")).unwrap(),
+                    "{kind:?} {dir}"
+                );
+            }
+            for (dir, error) in [
+                ("missing", "does not exist"),
+                ("file", "is not a directory"),
+            ] {
+                let refused = tools
+                    .run_command(line, Some(dir), std::future::pending())
+                    .await
+                    .unwrap_err();
+                assert!(refused.contains(error), "{refused}");
+            }
+            // A stop while the directory is looked up runs nothing.
+            let run = tools
+                .run_command(line, Some("a b"), std::future::ready(()))
+                .await
+                .unwrap();
+            assert_eq!(run.stopped, Some(Stopped::NotStarted));
+        }
+        let cmd = LocalTools::Native {
+            shell: shell(ShellKind::Cmd),
+            home: home.path().to_path_buf(),
+        };
+        for dir in [r"\\server\share", r"/\server\share", r"\/server/share"] {
+            let refused = cmd
+                .run_command("cd", Some(dir), std::future::pending())
+                .await
+                .unwrap_err();
+            assert!(refused.contains("pushd"), "{dir}: {refused}");
+        }
     }
 }

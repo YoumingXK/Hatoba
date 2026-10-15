@@ -2409,6 +2409,7 @@ dependencies = [
  "portable-pty",
  "process-wrap",
  "regex",
+ "regex-syntax",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

@@ -627,3 +627,36 @@ describe("allowed prefixes in PowerShell and Command Prompt (AI-19)", () => {
     expect(savablePrefixes(["Restart-Service", "npm run", "git pull"])).toBe(true);
   });
 });
+
+describe("a run_command call's workdir (AI-12, §13.5)", () => {
+  it("counts as a cd before the line", () => {
+    expect(readsOnlyCommand("git status", "posix", "/srv/app")).toBe(true);
+    expect(readsOnlyCommand("Get-ChildItem", "powershell", "C:/src")).toBe(true);
+    expect(commandAllowed("git pull", ["git pull"], "posix", "/srv/app")).toBe(true);
+    expect(allowancePrefixes("npm test", "posix", "/srv/app")).toEqual(["npm test"]);
+    // Command Prompt runs a program of the folder before one on PATH; PowerShell reaches another computer.
+    expect(readsOnlyCommand("dir", "cmd", "C:\\src")).toBe(false);
+    for (const share of ["\\\\server\\share", "//server/share", "/\\server\\share", "\\/server/share"]) {
+      expect(readsOnlyCommand("Get-ChildItem", "powershell", share), share).toBe(false);
+    }
+  });
+
+  it("offers its cd for that folder alone", () => {
+    expect(allowancePrefixes("msbuild app.sln", "cmd", "C:\\src")).toEqual(["cd C:\\src", "msbuild"]);
+    expect(allowancePrefixes("Get-ChildItem", "powershell", "\\\\server\\share")).toEqual(["cd \\\\server\\share"]);
+    expect(commandAllowed("git status", ["cd C:\\src"], "cmd", "C:\\src")).toBe(true);
+    expect(commandAllowed("git status", ["cd C:\\src"], "cmd", "D:\\other")).toBe(false);
+    expect(commandAllowed("msbuild app.sln", allowancePrefixes("msbuild app.sln", "cmd", "C:\\src")!, "cmd", "C:\\src")).toBe(true);
+    // A prefix cannot name a folder with a space.
+    expect(allowancePrefixes("msbuild app.sln", "cmd", "C:\\My Projects")).toBeNull();
+  });
+
+  it("asks when the directory hides characters", () => {
+    expect(readsOnlyCommand("ls", "posix", "/srv/\u202eppa")).toBe(false);
+    expect(allowancePrefixes("npm test", "posix", "/srv/\u202eppa")).toBeNull();
+  });
+
+  it("reads an empty directory as none", () => {
+    expect(readsOnlyCommand("dir", "cmd", "")).toBe(true);
+  });
+});
