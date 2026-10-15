@@ -1476,7 +1476,8 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**
  *  SEC-07, SEC-10: no biometric unlock is possible now — the sensor cannot be read (a Mac in
  *  clamshell mode, for one), no finger is enrolled, or the platform refused the request; the
- *  master password unlocks.
+ *  master password unlocks. Only the macOS biometric layer produces it today, so the other
+ *  platforms would call it dead code.
  */
 "biometric_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
