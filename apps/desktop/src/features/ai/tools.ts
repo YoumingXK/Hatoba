@@ -20,6 +20,7 @@ export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
 export const SEARCH_TOOLS = "search_tools";
 export const CALL_MCP_TOOL = "call_mcp_tool";
+export const MEMORY = "memory";
 
 export type ToolKind =
   | "read_terminal"
@@ -34,10 +35,11 @@ export type ToolKind =
   | "fetch_url"
   | "read_skill"
   | "search_tools"
+  | "memory"
   | "mcp"
   | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
+const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS, MEMORY];
 
 /** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
@@ -137,8 +139,9 @@ export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, d
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `read_file`, `grep`, `glob`, `web_search`, `read_skill` and
- * `search_tools` (AI-45) run without asking and everything else waits for the user; bypass runs everything.
+ * §13.5: in manual approval mode `read_terminal`, `read_file`, `grep`, `glob`, `web_search`, `read_skill`,
+ * `search_tools` (AI-45) and `memory` (AI-53) run without asking and everything else waits for the user; bypass
+ * runs everything.
  * Auto asks about the same calls as manual approval, and its judge decides which of them can skip the card
  * (AI-47). Unknown tools never run, so never ask.
  */
@@ -350,15 +353,22 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   fetch_url: "ai.tool.fetch_url",
   read_skill: "ai.tool.read_skill",
   search_tools: "ai.tool.search_tools",
+  memory: "ai.tool.memory",
 };
 
 /**
  * The name a call shows with: the built-in tool's label, `server · tool` for MCP, or the raw name. A
- * `call_mcp_tool` call shows as the tool it names: pass it through `shownCall` first.
+ * `call_mcp_tool` call shows as the tool it names: pass it through `shownCall` first. With the call's
+ * arguments, a `memory` call (AI-53) is named by what it does.
  */
-export function toolLabel(t: (key: MessageKey, params?: Params) => string, name: string): string {
+export function toolLabel(t: (key: MessageKey, params?: Params) => string, name: string, json?: string): string {
   const kind = toolKind(name);
   if (name === CALL_MCP_TOOL) return name;
+  if (kind === "memory" && json !== undefined) {
+    const action = parseArgs(json)?.action;
+    if (action === "save") return t("ai.tool.memory.save");
+    if (action === "delete") return t("ai.tool.memory.delete");
+  }
   if (kind === "mcp") {
     const [server, tool] = splitMcpName(name) ?? ["", name];
     return t("ai.tool.mcp", { server, tool });
@@ -497,6 +507,8 @@ export function callSummary(name: string, json: string): string {
       return [str(args.name), str(args.path)].filter(Boolean).join(" / ");
     case "search_tools":
       return str(args.query);
+    case "memory":
+      return str(args.name);
     case "read_file":
       return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
     case "edit_file":
