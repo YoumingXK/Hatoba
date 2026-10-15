@@ -709,6 +709,7 @@ pub enum ItemType {
     Skill,
     SkillFile,
     McpServer,
+    AiMemory,
     Settings,
 }
 
@@ -914,6 +915,9 @@ pub struct TerminalSettings {
     pub font_family: String,
     pub font_size: u32,
     pub theme: ThemeChoice,
+    /// Colour scheme ids for a dark and a light terminal; `None` until one is picked.
+    pub dark_scheme: Option<String>,
+    pub light_scheme: Option<String>,
     pub cursor_style: CursorChoice,
     pub scrollback: u32,
     pub right_click: RightClick,
@@ -932,6 +936,8 @@ pub struct TerminalSettingsPatch {
     pub font_family: Option<String>,
     pub font_size: Option<u32>,
     pub theme: Option<ThemeChoice>,
+    pub dark_scheme: Option<String>,
+    pub light_scheme: Option<String>,
     pub cursor_style: Option<CursorChoice>,
     pub scrollback: Option<u32>,
     pub right_click: Option<RightClick>,
@@ -1560,6 +1566,8 @@ pub struct AiSettingsView {
     /// The judge of Auto mode (AI-47): a model of a System One provider or of a provider that
     /// chats. Auto is unavailable until one is chosen.
     pub judge_model: Option<AiModelRef>,
+    /// Conversations start with the memories, and the assistant saves them (AI-53).
+    pub memory: bool,
 }
 
 /// What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
@@ -1580,6 +1588,7 @@ pub struct AiSettingsPatch {
     pub send_terminal_screen: Option<bool>,
     #[specta(type = Option<AiModelRef>)]
     pub judge_model: Clearable<AiModelRef>,
+    pub memory: Option<bool>,
 }
 
 /// A patch field that `null` clears.
@@ -2218,6 +2227,24 @@ pub struct SkillView {
     /// Paths of the files besides `SKILL.md`, sorted.
     pub files: Vec<String>,
     pub updated_at: i64,
+}
+
+/// A memory of the AI assistant (AI-53).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiMemoryView {
+    pub id: String,
+    pub name: String,
+    pub content: String,
+    pub updated_at: i64,
+}
+
+/// A memory to save from Settings → AI (AI-53).
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct AiMemoryInput {
+    /// `None` creates a memory.
+    pub id: Option<String>,
+    pub name: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

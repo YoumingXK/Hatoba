@@ -1,4 +1,4 @@
-import { detectLocale } from "@/i18n";
+import { mockLocale } from "./visitor";
 import type {
   AvailableUpdate,
   ConflictView,
@@ -19,7 +19,7 @@ import type {
 
 /** Sample data from the design file (`Hatoba.dc.html`), used when running in a plain browser. */
 
-const zh = detectLocale() === "zh-CN";
+const zh = mockLocale() === "zh-CN";
 const MIN = 60_000;
 const DAY = 86_400_000;
 
@@ -267,6 +267,8 @@ export const SETTINGS: SettingsView = {
     font_family: "Cascadia Mono",
     font_size: 13,
     theme: "dark",
+    dark_scheme: null,
+    light_scheme: null,
     cursor_style: "block",
     scrollback: 10000,
     right_click: "copy_paste",

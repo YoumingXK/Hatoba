@@ -49,6 +49,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Auto | 跟随系统 | システムに合わせる |
 | Terminal Colors | 终端配色 | ターミナルの配色 |
 | Always Dark | 始终深色 | 常にダーク |
+| Always Light | 始终浅色 | 常にライト |
 | Match Appearance | 跟随外观 | 外観に合わせる |
 | List Density | 列表密度 | リストの密度 |
 | Regular | 标准 | 標準 |
@@ -60,7 +61,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | 日本語 | 日本語 | 日本語 |
 
 - **Appearance**: **Light**, **Dark**, or **Auto** (follows the system and changes live).
-- **Terminal Colors**: **Always Dark** (default) or **Match Appearance**.
+- **Terminal Colors**: **Always Dark** (default), **Always Light** or **Match Appearance**, and a color scheme for a dark and a light terminal (Dracula, Nord, Solarized and others); see `references/terminal.md`.
 - **List Density**: **Regular** or **Compact** rows in lists.
 - **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
 
@@ -157,4 +158,4 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the local terminal shell, the SSH agent socket, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, the memory switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the local terminal shell, the SSH agent socket, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
