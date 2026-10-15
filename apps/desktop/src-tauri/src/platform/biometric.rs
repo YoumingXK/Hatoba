@@ -266,16 +266,26 @@ mod imp {
     /// process that has no window to put it in.
     const ERR_UNIMPLEMENTED: isize = -4;
 
-    /// Whether this Mac can do it at all: Touch ID with a finger enrolled. A Mac without one hides
-    /// the feature, as a machine without Windows Hello does on Windows.
+    /// Whether this Mac can do it at all: Touch ID is there, so a Mac without one hides the switch,
+    /// as a machine without Windows Hello does on Windows.
+    ///
+    /// The answer comes from the biometric type, not from `canEvaluatePolicy`, which answers
+    /// "Authentication canceled" on a Mac where Touch ID works and a finger is enrolled: evaluating
+    /// that policy asks for the prompt there and then, which a call that only wants to know what
+    /// the hardware is cannot satisfy. Whether a finger is really enrolled is settled where it
+    /// matters instead, by the key's own control at enrolment.
     pub fn available() -> bool {
         let context = unsafe { LAContext::new() };
         // SAFETY: only the policy result and the biometric type of a context made here are read.
         unsafe {
-            context
-                .canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics)
-                .is_ok()
-                && context.biometryType() != LABiometryType::None
+            // Documented as what fills in `biometryType`; its answer is not usable here and is
+            // logged for the next machine that disagrees.
+            if let Err(error) =
+                context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics)
+            {
+                tracing::debug!("the biometrics policy cannot be evaluated here: {error}");
+            }
+            context.biometryType() != LABiometryType::None
         }
     }
 
