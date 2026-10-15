@@ -29,7 +29,8 @@ import { dropSessionForwards, syncActiveForwards } from "./forwards";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
 import { askSecret, cancelSessionPrompts } from "./prompts";
-import { resolveMode, SEARCH_DECORATIONS, terminalOptions, useTermSettings } from "./theme";
+import { searchColors } from "./schemes";
+import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
 export interface Credentials {
@@ -239,6 +240,14 @@ export class LiveSession {
     if (this.disposed) return;
     Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
     requestAnimationFrame(() => this.fitNow());
+    // The search addon keeps the colours it drew matches with, so a new scheme redraws them. Searching
+    // again scrolls to a match; the view stays where the user left it.
+    if (this.findQuery && JSON.stringify(this.findColors()) !== this.findDrawn) {
+      const top = this.term.buffer.active.viewportY;
+      this.search.clearDecorations();
+      this.find(this.findQuery, "next", true);
+      this.term.scrollToLine(top);
+    }
   }
 
   private scheduleFit() {
@@ -624,16 +633,30 @@ export class LiveSession {
 
   // ───────────── search ─────────────
 
+  /** The find bar's query while it highlights matches, and the colours they were drawn with (JSON). */
+  private findQuery = "";
+  private findDrawn = "";
+
+  private findColors() {
+    return searchColors(resolveScheme(useTermSettings.getState().settings));
+  }
+
   find(query: string, direction: "next" | "prev", incremental = false): boolean {
+    this.findQuery = query;
     if (!query) {
       this.search.clearDecorations();
       return false;
     }
-    const options = {
-      incremental,
-      decorations: SEARCH_DECORATIONS[resolveMode(useTermSettings.getState().settings.theme)],
-    };
+    const decorations = this.findColors();
+    this.findDrawn = JSON.stringify(decorations);
+    const options = { incremental, decorations };
     return direction === "next" ? this.search.findNext(query, options) : this.search.findPrevious(query, options);
+  }
+
+  /** The find bar closed: drop the highlights. */
+  endFind() {
+    this.findQuery = "";
+    this.search.clearDecorations();
   }
 
   requestFind() {
