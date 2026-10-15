@@ -296,6 +296,11 @@ export const commands = {
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
+	/**
+	 *  Settings → SSH Agent (SSH-09): the agent this device authenticates with and the keys it holds.
+	 *  A device without an agent is not an error: the page says so.
+	 */
+	sshAgentStatus: () => __TAURI_INVOKE<SshAgentView>("ssh_agent_status"),
 	/**  The sidebar's star prompt (spec §9). The first read records when this device started waiting. */
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
@@ -1472,7 +1477,14 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
 "wrong_pin" | 
 /**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
-"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+"pin_unavailable" | 
+/**
+ *  SEC-07, SEC-10: no biometric unlock is possible now — the sensor cannot be read (a Mac in
+ *  clamshell mode, for one), no finger is enrolled, or the platform refused the request; the
+ *  master password unlocks. Only the macOS biometric layer produces it today, so the other
+ *  platforms would call it dead code.
+ */
+"biometric_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -1722,6 +1734,12 @@ export type LocalPrefs = {
 	ai_panel_width: number,
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
+	/**
+	 *  SSH-09: the ssh-agent socket this device authenticates with. `None` uses `SSH_AUTH_SOCK`,
+	 *  and, when that names nothing, the well-known agent sockets of the device, Bitwarden's
+	 *  included.
+	 */
+	ssh_agent_socket: string | null,
 	/**  SEC-02: minutes without input before the vault locks; 0 never locks. */
 	auto_lock_minutes: number,
 	/**  SEC-02: lock the vault when the computer sleeps. */
@@ -2138,6 +2156,29 @@ export type SkillView = {
 	/**  Paths of the files besides `SKILL.md`, sorted. */
 	files: string[],
 	updated_at: number,
+};
+
+/**  One key an ssh-agent holds (SSH-09). */
+export type SshAgentKey = {
+	algorithm: string,
+	/**  `SHA256:...`, as `ssh-add -l` writes it. */
+	fingerprint: string,
+	comment: string,
+};
+
+/**  The agent behind an ssh-agent socket (SSH-09). */
+export type SshAgentKind = 
+/**  An agent Hatoba does not recognize from the socket path. */
+"system" | "bitwarden" | "one_password" | "gnu_pgp" | "keyring";
+
+/**  Settings → SSH Agent (SSH-09): the agent this device authenticates with, and what it holds. */
+export type SshAgentView = {
+	/**  The socket the device uses now, absent when no agent answers. */
+	socket: string | null,
+	kind: SshAgentKind | null,
+	keys: SshAgentKey[],
+	/**  Why no agent answers, when none does. */
+	error: string | null,
 };
 
 export type SshConfigCandidate = {

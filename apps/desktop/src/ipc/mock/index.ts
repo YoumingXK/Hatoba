@@ -53,8 +53,11 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?star=due
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
+ *   ?agent=off                              (no ssh-agent at all, SSH-09)
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?biometric=unavailable | cancelled     (the biometric unlock refuses, as a Mac with its
+ *                                           lid shut does)
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -92,6 +95,7 @@ export function createMockApi(): HatobaApi {
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
   let closeDemo = q.get("close") === "prompt";
+  const agentDemo = q.get("agent");
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
   const BUNDLED_WORKER = "0.2.0";
@@ -117,6 +121,8 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  /** SEC-07, SEC-10: how the biometric unlock answers, for the states a Mac cannot show. */
+  const biometricRefusal = q.get("biometric");
   const pinDemo = q.get("pin");
   const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
   /** Any full unlock arms the PIN again and resets its failures. */
@@ -317,6 +323,12 @@ export function createMockApi(): HatobaApi {
     },
     vault_unlock_biometric: async () => {
       await delay(700);
+      if (biometricRefusal === "unavailable") {
+        // What macOS answers with the lid shut: the sensor cannot be read, and the password is
+        // still there.
+        fail("biometric_unavailable", "Touch ID is not available in closed clamshell mode.");
+      }
+      if (biometricRefusal === "cancelled") fail("cancelled");
       armPin();
       vaultState = "unlocked";
     },
@@ -1088,6 +1100,20 @@ export function createMockApi(): HatobaApi {
     prefs_save: async (next) => {
       prefs = next;
       localStorage.setItem("hatoba.mock.prefs", JSON.stringify(next));
+    },
+    // SSH-09: the sample device's Bitwarden agent, the chosen socket, or no agent with `?agent=off`.
+    ssh_agent_status: async () => {
+      if (agentDemo === "off") return structuredClone(D.SSH_AGENT_NONE);
+      const chosen = prefs.ssh_agent_socket;
+      if (chosen && chosen !== D.SSH_AGENT.socket) {
+        // A path that is not the agent of this device, as the real backend reports it.
+        return {
+          ...structuredClone(D.SSH_AGENT_NONE),
+          error: `no ssh-agent answered at ${chosen}: No such file or directory (os error 2)`,
+        };
+      }
+      const sample = structuredClone(D.SSH_AGENT);
+      return chosen ? { ...sample, socket: chosen } : sample;
     },
     star_prompt_get: async () => ({ ...starPrompt }),
     star_prompt_done: async () => {

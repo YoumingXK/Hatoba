@@ -17,7 +17,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | 🟡 | Needs verification on a real Windows machine |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2 |
+| SEC-10 | Touch ID | 🟡 | Verified on a real Mac (enrolment, the lock screen, and the record's mode); not on a Developer ID build |
 | SEC-11 | PIN unlock | 🟡 | Keeping the PIN after a restart needs verification with the credential store on each platform |
 
 ## SSH, terminal, SFTP, and forwarding (§7)
@@ -26,7 +26,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 |---|---|---|---|
 | SSH-01…07 | Connection, authentication, fingerprints, timeouts, reconnect | ✅ | |
 | SSH-08 | keyboard-interactive | ✅ | |
-| SSH-09 | ssh-agent | 🟡 | The Windows named pipe needs verification on a real machine. Pageant (P2) ⬜ |
+| SSH-09 | ssh-agent, Bitwarden and 1Password included | 🟡 | The Unix socket paths are tested against a real `ssh-agent` and against Bitwarden on macOS; the Windows named pipe still needs verification on a real machine. Pageant (P2) ⬜ |
 | SSH-10 | ProxyJump | ✅ | |
 | SSH-11 | Import ssh config | ✅ | |
 | SSH-12 | Import PuTTY sessions | ⬜ | P2 |
