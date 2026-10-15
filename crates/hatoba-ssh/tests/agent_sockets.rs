@@ -87,6 +87,7 @@ async fn the_bitwarden_socket_is_found_without_ssh_auth_sock() {
         std::env::set_var("HOME", &home);
         std::env::remove_var("SSH_AUTH_SOCK");
         std::env::remove_var("XDG_RUNTIME_DIR");
+        std::env::remove_var("GNUPGHOME");
     }
 
     // The socket is offered, named after the agent that listens on it, and answers.

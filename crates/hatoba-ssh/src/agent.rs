@@ -138,9 +138,23 @@ pub fn agent_sockets(chosen: Option<&str>) -> Vec<AgentSocket> {
     candidates(chosen, &Env::of_process())
 }
 
+/// The path as the user typed it, with a leading `~` read as the home directory: people write
+/// `~/.bitwarden-ssh-agent.sock` by hand, and the shell that would have expanded it is not here.
+/// `~user` is left alone, as nothing here knows another user's home.
+fn expand_home(path: &str, env: &Env) -> PathBuf {
+    match env.home.as_deref() {
+        Some(home) if path == "~" => home.to_path_buf(),
+        Some(home) => match path.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => PathBuf::from(path),
+        },
+        None => PathBuf::from(path),
+    }
+}
+
 fn candidates(chosen: Option<&str>, env: &Env) -> Vec<AgentSocket> {
     if let Some(path) = chosen.map(str::trim).filter(|p| !p.is_empty()) {
-        return vec![AgentSocket::new(PathBuf::from(path))];
+        return vec![AgentSocket::new(expand_home(path, env))];
     }
     // A socket this session's environment sets is honoured as it is: using another agent behind it
     // would authenticate with a key the user did not point this session at, and hide a path that
@@ -238,14 +252,26 @@ pub(crate) async fn connect(
     let mut refusals: Vec<String> = Vec::new();
     let mut empty: Option<(Agent, AgentSocket)> = None;
     for socket in &sockets {
-        let mut agent = match open(socket).await {
-            Ok(agent) => agent,
-            Err(message) => {
+        // The connect is bounded as well as the request: a busy Windows named pipe retries
+        // inside the client with no deadline of its own, so waiting for it there would keep the
+        // whole search pending past the probe timeout.
+        let mut agent = match tokio::time::timeout(PROBE_TIMEOUT, open(socket)).await {
+            Ok(Ok(agent)) => agent,
+            Ok(Err(message)) => {
                 tracing::debug!(
                     "ssh-agent at {} did not answer: {message}",
                     socket.display()
                 );
                 refusals.push(message);
+                continue;
+            }
+            Err(_) => {
+                tracing::debug!("ssh-agent at {} did not answer in time", socket.display());
+                refusals.push(format!(
+                    "{}: no answer in {} seconds",
+                    socket.display(),
+                    PROBE_TIMEOUT.as_secs()
+                ));
                 continue;
             }
         };
@@ -413,6 +439,30 @@ mod tests {
         assert_eq!(sockets.len(), 1);
         assert_eq!(sockets[0].path, chosen);
         assert_eq!(sockets[0].kind, AgentKind::Bitwarden);
+    }
+
+    #[test]
+    fn a_leading_tilde_in_a_chosen_path_is_the_home_directory() {
+        let env = Env {
+            socket: None,
+            home: Some(PathBuf::from("/Users/someone")),
+            runtime: None,
+            gnupg: None,
+        };
+        assert_eq!(
+            expand_home("~/.bitwarden-ssh-agent.sock", &env),
+            PathBuf::from("/Users/someone/.bitwarden-ssh-agent.sock")
+        );
+        assert_eq!(expand_home("~", &env), PathBuf::from("/Users/someone"));
+        // Another user's home is not ours to guess, and an absolute path is left alone.
+        assert_eq!(
+            expand_home("~someone/agent.sock", &env),
+            PathBuf::from("~someone/agent.sock")
+        );
+        assert_eq!(
+            expand_home("/run/agent.sock", &env),
+            PathBuf::from("/run/agent.sock")
+        );
     }
 
     #[test]
