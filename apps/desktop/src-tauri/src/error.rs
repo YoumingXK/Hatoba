@@ -19,7 +19,9 @@ pub enum ErrorCode {
     PinUnavailable,
     /// SEC-07, SEC-10: no biometric unlock is possible now — the sensor cannot be read (a Mac in
     /// clamshell mode, for one), no finger is enrolled, or the platform refused the request; the
-    /// master password unlocks.
+    /// master password unlocks. Only the macOS biometric layer produces it today, so the other
+    /// platforms would call it dead code.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     BiometricUnavailable,
     NotFound,
     InvalidInput,
