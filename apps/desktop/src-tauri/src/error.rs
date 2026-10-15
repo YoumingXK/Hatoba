@@ -17,6 +17,10 @@ pub enum ErrorCode {
     WrongPin,
     /// SEC-11: no PIN unlock is possible now; the master password unlocks.
     PinUnavailable,
+    /// SEC-07, SEC-10: no biometric unlock is possible now — the sensor cannot be read (a Mac in
+    /// clamshell mode, for one), no finger is enrolled, or the platform refused the request; the
+    /// master password unlocks.
+    BiometricUnavailable,
     NotFound,
     InvalidInput,
     KeyParse,
