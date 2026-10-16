@@ -51,6 +51,7 @@ export type ErrorCode =
   /** SEC-07, SEC-10: the sensor cannot be read now (a closed lid on a Mac, for one), or the
    * platform refused the request; the master password unlocks. */
   | "biometric_unavailable"
+  | "biometric_stale"
   | "cancelled"
   | "io"
   | "internal";

@@ -59,8 +59,9 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?agent=off                              (no ssh-agent at all, SSH-09)
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
- *   ?biometric=unavailable | cancelled     (the biometric unlock refuses, as a Mac with its
- *                                           lid shut does)
+ *   ?biometric=unavailable | stale | cancelled
+ *                                           (the biometric unlock refuses: not now, a record
+ *                                           this Mac cannot open, or the user said no)
  *   ?lang=en | zh-CN | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
@@ -345,6 +346,11 @@ export function createMockApi(): HatobaApi {
         // What macOS answers with the lid shut: the sensor cannot be read, and the password is
         // still there.
         fail("biometric_unavailable", "Touch ID is not available in closed clamshell mode.");
+      }
+      if (biometricRefusal === "stale") {
+        // What a Mac that did not make the record answers with, after the vault came over with
+        // Migration Assistant: the key cannot be imported, and it is not a wrong password.
+        fail("biometric_stale", "the saved Touch ID key cannot be used on this Mac.");
       }
       if (biometricRefusal === "cancelled") fail("cancelled");
       armPin();

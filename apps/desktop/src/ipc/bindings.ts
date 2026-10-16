@@ -1514,7 +1514,14 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
  *  master password unlocks. Only the macOS biometric layer produces it today, so the other
  *  platforms would call it dead code.
  */
-"biometric_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+"biometric_unavailable" | 
+/**
+ *  SEC-07, SEC-10: the saved biometric unlock cannot be opened any more — it was written by
+ *  another build, it is damaged, or it came from another Mac along with the vault (Migration
+ *  Assistant). Nothing the user typed was wrong, so it must not be reported as a wrong
+ *  password: the master password unlocks, and the biometric has to be turned on again.
+ */
+"biometric_stale" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
