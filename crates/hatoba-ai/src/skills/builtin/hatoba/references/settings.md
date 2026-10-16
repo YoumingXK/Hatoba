@@ -2,7 +2,6 @@
 
 Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS). It is a window over the app with eight tabs. Changes apply at once; there is no Save button. Esc or the close button closes it. Terminal settings are in `references/terminal.md` and AI settings in `references/ai-settings.md`.
 
-
 ## General
 
 - **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
@@ -39,22 +38,9 @@ The SSH agent this device authenticates with (hosts whose **Method** is **SSH Ag
 - The two agents people ask about: **Bitwarden** must have its agent on (Bitwarden: Settings → Enable SSH agent); on macOS and Linux Hatoba finds `~/.bitwarden-ssh-agent.sock` by itself, so `SSH_AUTH_SOCK` may stay out of `~/.zshrc`, which a window opened from Finder or a desktop launcher would not read anyway. **1Password** works the same way. On Windows both need the OpenSSH Authentication Agent service stopped and the Bitwarden agent on, because they share the `\\.\pipe\openssh-ssh-agent` pipe. Pageant is not supported.
 - A socket named here is used by every connection of this device, also over a jump host. It stays on this device and does not sync.
 
-| en | zh-CN | ja |
-|---|---|---|
-| SSH Agent | SSH Agent | SSH エージェント |
-| Automatic | 自动检测 | 自動 |
-| Custom path… | 自定义路径… | カスタムパス… |
-| Socket path | Socket 路径 | ソケットのパス |
-| Current agent | 当前 Agent | 現在のエージェント |
-| Check again | 重新检查 | 再確認 |
-| Bitwarden | Bitwarden | Bitwarden |
-| 1Password | 1Password | 1Password |
-| GnuPG | GnuPG | GnuPG |
-| GNOME Keyring | GNOME Keyring | GNOME Keyring |
-
 ## Security
 
-Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
+Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), **Unlock with Touch ID** (macOS, where the Mac has Touch ID, with the master password asked once to turn it on), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
 
 Other labels: **Master Password**, **Change…**, **Recovery Code**, **Generate New Code…**.
 

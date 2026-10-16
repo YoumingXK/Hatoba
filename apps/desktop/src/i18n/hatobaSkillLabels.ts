@@ -220,7 +220,7 @@ export const AREAS: Area[] = [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.lockNow", "tray.lock",
           "settings.sec.never", "settings.sec.hour", "lock.overlay", "vault.unlock.field", "vault.unlock.submit",
           "vault.unlock.forgot", "vault.recover.title", "vault.recover.newPassword", "vault.recover.submit",
-          "vault.unlock.hello", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
+          "vault.unlock.hello", "vault.unlock.touchId", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
           "vault.unlock.subtitlePin", "vault.unlock.usePassword", "vault.unlock.usePin", "settings.sec.pinRestart",
           "settings.tab.security", "err.throttled", "lock.sessionsKept",
         ],
@@ -242,7 +242,12 @@ export const AREAS: Area[] = [
       "references/settings.md": {
         "": [
           "settings.title", "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
-          "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
+          "settings.tab.proxies", "settings.tab.agent", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
+        ],
+        "SSH Agent": [
+          "settings.agent.source", "settings.agent.automatic", "settings.agent.custom", "settings.agent.path",
+          "settings.agent.status", "settings.agent.recheck", "settings.agent.kind.bitwarden",
+          "settings.agent.kind.onePassword", "settings.agent.kind.gpg", "settings.agent.kind.keyring",
         ],
         "General": [
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
@@ -262,7 +267,7 @@ export const AREAS: Area[] = [
         ],
         "Security": [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.clipboard",
-          "settings.sec.hello", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
+          "settings.sec.hello", "settings.sec.touchId", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
           "settings.sec.password.button", "settings.sec.recovery", "settings.sec.recovery.button",
           "settings.sec.lockNow", "settings.sec.lockNow.button",
         ],

@@ -46,6 +46,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | New Master Password | 新主密码 |
 | Reset and Unlock | 重置并解锁 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 |
+| Unlock with Touch ID | 使用 Touch ID 解锁 |
 | Unlock with PIN | 使用 PIN 解锁 |
 | Set Up PIN | 设置 PIN |
 | Confirm PIN | 确认 PIN |
@@ -121,9 +122,25 @@ The labels that these files name in English, as the interface shows them in Simp
 | Appearance | 外观 |
 | Terminal | 终端 |
 | Proxies | 代理 |
+| SSH Agent | SSH Agent |
 | Security | 安全 |
 | AI | AI |
 | About | 关于 |
+
+### SSH Agent
+
+| en | zh-CN |
+|---|---|
+| SSH agent of this device | 这台设备使用的 SSH Agent |
+| Automatic | 自动检测 |
+| Custom path… | 自定义路径… |
+| Socket path | Socket 路径 |
+| Current agent | 当前 Agent |
+| Check again | 重新检查 |
+| Bitwarden | Bitwarden |
+| 1Password | 1Password |
+| GnuPG | GnuPG |
+| GNOME Keyring | GNOME Keyring |
 
 ### General
 
@@ -184,6 +201,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Disconnect all sessions when locked | 锁定时断开所有会话 |
 | Clear Clipboard | 清除剪贴板 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 |
+| Unlock with Touch ID | 使用 Touch ID 解锁 |
 | Unlock with PIN | 使用 PIN 解锁 |
 | Require the master password after a restart | 重启后需要输入主密码 |
 | Master Password | 主密码 |
