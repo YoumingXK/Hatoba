@@ -281,6 +281,14 @@ mod imp {
     const LA_DOMAIN: &str = "com.apple.LocalAuthentication";
     /// The domain the Security framework reports its OSStatus values in.
     const OS_DOMAIN: &str = "NSOSStatusErrorDomain";
+    /// The domain the Secure Enclave reports through. Its numbers are not OSStatus ones either —
+    /// `-3` here is not `errSecNoSuchAttr`, and cannot be read from another domain's table.
+    const CTK_DOMAIN: &str = "CryptoTokenKit";
+    /// `CryptoTokenKit`: the key was made with `biometryCurrentSet` and the enrolled fingerprints
+    /// have changed since, so the enclave will not do a private-key operation with it again
+    /// (measured: `unable to compute shared secret`, with the enclave's own `AKSError=-536362999`,
+    /// after one fingerprint was added to this Mac).
+    const ERR_KEY_INVALIDATED: isize = -3;
 
     /// Whether this Mac can do it at all: Touch ID is there, so a Mac without one hides the switch,
     /// as a machine without Windows Hello does on Windows.
@@ -339,7 +347,7 @@ mod imp {
             let blob = key_blob(&enclave)?;
             // The record has to hold this exact key before it is kept, and proving that must cost
             // no second sheet: creating the key already asked for one, and a person who turns the
-            // switch on sees exactly one. So the blob comes back *without* the control — attaching
+            // switch on sees exactly one. So the blob comes back without the control — attaching
             // it is what asks — and comparing public points says the same key came back. The
             // record's own restore at unlock passes the control, as `key_from_blob` does.
             let private = unsafe { kSecAttrKeyClassPrivate };
@@ -614,6 +622,9 @@ mod imp {
             // The Secure Enclave's own answer when it cannot reach the biometric now — including
             // the lockout the store reports instead of LocalAuthentication's own code.
             (OS_DOMAIN, ERR_INTERACTION_NOT_ALLOWED | ERR_AUTH_FAILED) => unavailable(error),
+            // The fingerprints changed after the key was made: the record is not wrong, it is
+            // finished — no retry brings it back, and the feature has to be turned on again.
+            (CTK_DOMAIN, ERR_KEY_INVALIDATED) => stale(error),
             (_, _) => AppError::new(
                 ErrorCode::Internal,
                 format!("Touch ID could not be used ({error}, {domain} {code})"),
@@ -631,6 +642,20 @@ mod imp {
         AppError::new(
             ErrorCode::BiometricUnavailable,
             "Touch ID cannot be used right now; the master password unlocks",
+        )
+    }
+
+    /// A record that cannot be used again: the framework's reason goes to the log, and the user is
+    /// told what to do rather than that something went wrong.
+    fn stale(error: &core_foundation::error::CFError) -> AppError {
+        tracing::warn!(
+            "the Touch ID key cannot be used any more: {} ({error})",
+            error.description()
+        );
+        AppError::new(
+            ErrorCode::BiometricStale,
+            "the saved Touch ID record cannot be used on this Mac; unlock with the master password \
+             and turn Touch ID on again",
         )
     }
 
@@ -702,6 +727,70 @@ mod imp {
 
     #[cfg(test)]
     mod tests {
+        /// A `CFError` with a domain and a code, as the frameworks hand one over.
+        fn framework_error(domain: &str, code: isize) -> core_foundation::error::CFError {
+            use core_foundation::base::TCFType;
+            use core_foundation::string::CFString;
+            use core_foundation_sys::error::CFErrorCreate;
+            let domain = CFString::new(domain);
+            let raw = unsafe {
+                CFErrorCreate(
+                    std::ptr::null(),
+                    domain.as_concrete_TypeRef(),
+                    code,
+                    std::ptr::null(),
+                )
+            };
+            unsafe { core_foundation::error::CFError::wrap_under_create_rule(raw) }
+        }
+
+        #[test]
+        fn a_refusal_is_read_by_its_domain_and_its_code() {
+            use ErrorCode::{BiometricStale, BiometricUnavailable, Cancelled, Internal};
+            // What this Mac answered after a fingerprint was added: the key was invalidated.
+            assert_eq!(
+                exchange_error(&framework_error(CTK_DOMAIN, ERR_KEY_INVALIDATED)).code,
+                BiometricStale
+            );
+            // A closed lid, a lockout, no finger enrolled, and a process that cannot ask at all.
+            for code in [
+                ERR_SYSTEM_CANCEL,
+                ERR_BIOMETRY_NOT_AVAILABLE,
+                ERR_BIOMETRY_NOT_ENROLLED,
+                ERR_BIOMETRY_LOCKOUT,
+                ERR_NOT_INTERACTIVE,
+            ] {
+                assert_eq!(
+                    exchange_error(&framework_error(LA_DOMAIN, code)).code,
+                    BiometricUnavailable,
+                    "LAError {code}"
+                );
+            }
+            assert_eq!(
+                exchange_error(&framework_error(OS_DOMAIN, ERR_INTERACTION_NOT_ALLOWED)).code,
+                BiometricUnavailable
+            );
+            // The user's own cancel, which stays quiet on the lock screen.
+            assert_eq!(
+                exchange_error(&framework_error(LA_DOMAIN, ERR_USER_CANCEL)).code,
+                Cancelled
+            );
+            // The same numbers in other domains are other things: `-4` is `errSecUnimplemented`
+            // to the Security framework, which is how a code-only match read a closed lid.
+            assert_eq!(
+                exchange_error(&framework_error(OS_DOMAIN, -4)).code,
+                Internal
+            );
+            assert_eq!(
+                exchange_error(&framework_error(CTK_DOMAIN, -1)).code,
+                Internal
+            );
+            assert_eq!(
+                exchange_error(&framework_error("Elsewhere", -3)).code,
+                Internal
+            );
+        }
+
         use super::*;
 
         /// A directory of this test's own, gone when it ends; the crate's other tests make theirs
