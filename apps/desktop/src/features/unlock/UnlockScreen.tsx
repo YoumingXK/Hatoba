@@ -85,10 +85,12 @@ export function UnlockScreen() {
     async (e: unknown, byItself = false) => {
       const err = toAppError(e);
       if (err.code === "cancelled") return;
-      // SEC-10: with the lid shut the prompt the app raises on its own is refused at once, and a
-      // record this Mac can never open is refused every time. Neither is worth a red line on every
-      // unlock: they show when the button was clicked, and the request was deliberate then.
-      if (byItself && (err.code === "biometric_unavailable" || err.code === "biometric_stale")) return;
+      // SEC-10: with the lid shut, the prompt the app raises on its own is refused at once, and a red
+      // line on every unlock is an error the user never asked for: it shows when the button was
+      // clicked, because that request was deliberate. A record this Mac can no longer open is a
+      // different thing — it never opens again by waiting, and the user has to be told to turn Touch
+      // ID on again — so that one speaks even from the prompt.
+      if (byItself && err.code === "biometric_unavailable") return;
       // A record this Mac cannot open any more — the vault came from another Mac — is not a wrong
       // password: the field asks for the master password, and the message says Touch ID has to be
       // turned on again.
