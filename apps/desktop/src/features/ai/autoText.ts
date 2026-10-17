@@ -92,6 +92,8 @@ export function ruleText(t: Tr, rule: HardRule): string {
       return t("ai.auto.rule.mcpUnknown");
     case "hidden":
       return t("ai.auto.rule.hidden");
+    case "editing_submission":
+      return t("ai.auto.rule.editingSubmission");
     case "command":
       return t("ai.auto.rule.command", { command: rule.command });
     case "password":

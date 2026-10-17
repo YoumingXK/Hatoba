@@ -1,6 +1,7 @@
 import type { McpToolInfo } from "@/ipc/types";
 import { HIDDEN, type ShellDialect, windowsName } from "./commandRules";
 import type { ToolKind } from "./tools";
+import { keySequence, parseSendKey } from "./sendKeys";
 
 /**
  * AI-47: the hard rules of Auto mode. A call that manual approval would ask about goes to the judge first,
@@ -11,6 +12,8 @@ import type { ToolKind } from "./tools";
  * - a `run_command` command or directory, `send_input` text or string of an MCP call's arguments with hidden or
  *   bidirectional characters, which could show the judge and the user something other than what runs (an MCP
  *   call's strings may hold the tabs and line breaks of code and text: {@link MCP_HIDDEN});
+ * - `send_input` that edits and then submits the terminal line in one call, since the resulting line
+ *   cannot be checked against a fresh screen;
  * - a `run_command` command, `send_input` text or MCP call's arguments that name one of
  *   {@link ALWAYS_ASK_COMMANDS}: an MCP call's strings at any depth, as its server may run them as a command;
  *   on a PowerShell or Command Prompt tab, a command or text that names one of {@link WINDOWS_ALWAYS_ASK_COMMANDS}
@@ -19,7 +22,7 @@ import type { ToolKind } from "./tools";
  * - any call after the user rejected an earlier call of the same response (`after_reject`, which the turn
  *   applies).
  *
- * A `send_input` call that submits a line (its text has a line break, or its key is Enter) is also checked
+ * A `send_input` call that submits a line (a line break, Enter, Ctrl+M, Ctrl+J or Ctrl+O in either key field) is also checked
  * with the cursor's line before it, so that a command split across calls is caught: `rm ` typed by one call
  * and `-rf /data` plus Enter by the next, or `shut` completed by Tab and then entered. The cursor's line
  * starts with the prompt, which {@link namedCommand} reads past.
@@ -55,6 +58,8 @@ export type HardRule =
   | { kind: "mcp_unknown" }
   /** The command or its directory, the text or the MCP call's arguments have hidden or bidirectional characters. */
   | { kind: "hidden" }
+  /** Terminal editing followed by a submission in the same call, before the resulting line can be read. */
+  | { kind: "editing_submission" }
   /** The command, the line the text submits or the MCP call's arguments name `command`: one of {@link ALWAYS_ASK_COMMANDS}, or `rm -r`. */
   | { kind: "command"; command: string }
   /** `send_input` while the screen asks for a password or passphrase. */
@@ -92,14 +97,34 @@ export function hardRule({ kind, args, mcp, screen, dialect = "posix" }: HardRul
   const text = typeof value === "string" ? value : "";
   if (HIDDEN.test(text)) return { kind: "hidden" };
   if (kind === "run_command" && typeof args.workdir === "string" && HIDDEN.test(args.workdir)) return { kind: "hidden" };
-  if (kind !== "send_input" || !screen) return commandRule([text], dialect);
+  // Printable keys also type text. Keep their order when checking a command split across calls.
+  let typed = text;
+  if (kind === "send_input") {
+    const tab = text.indexOf("\t");
+    let editing = tab !== -1;
+    if (editing && /[\r\n]/.test(text.slice(tab + 1))) return { kind: "editing_submission" };
+    for (const key of [args.key, ...(Array.isArray(args.keys) ? args.keys : [])]) {
+      const parsed = parseSendKey(key);
+      if (parsed === null) continue;
+      const bytes = keySequence(parsed, false);
+      // Readline's Ctrl+O runs the current line too. Other controls may edit it; a CR/LF inside an
+      // escape sequence counts as both editing and submission (for example Alt+Enter).
+      const submits = bytes === "\r" || bytes === "\n" || bytes === "\x0f";
+      const edits = !submits && (bytes === "\t" || HIDDEN.test(bytes));
+      editing ||= edits;
+      if (editing && (submits || /[\r\n]/.test(bytes))) return { kind: "editing_submission" };
+      if (submits) typed += "\n";
+      else if (!edits) typed += bytes;
+    }
+  }
+  if (kind !== "send_input" || !screen) return commandRule([typed], dialect);
   const cursor = lastLine(screen);
   if (passwordPrompt(cursor)) return { kind: "password" };
-  if (!submits(args, text)) return commandRule([text], dialect);
+  if (!/[\r\n]/.test(typed)) return commandRule([typed], dialect);
   if (HIDDEN.test(cursor)) return { kind: "hidden" };
   // The line the shell receives: the text continues what the cursor's line holds, whose trailing spaces the
   // screen does not keep, so the two are joined both without and with a space.
-  return commandRule([text, cursor + text, `${cursor} ${text}`], dialect);
+  return commandRule([typed, cursor + typed, `${cursor} ${typed}`], dialect);
 }
 
 function commandRule(lines: readonly string[], dialect: ShellDialect): HardRule | null {
@@ -108,11 +133,6 @@ function commandRule(lines: readonly string[], dialect: ShellDialect): HardRule 
     if (command) return { kind: "command", command };
   }
   return null;
-}
-
-/** Whether a `send_input` call submits the line it types: its text has a line break, or its key is Enter. */
-function submits(args: Record<string, unknown>, text: string): boolean {
-  return text.includes("\n") || (typeof args.key === "string" && args.key.toLowerCase() === "enter");
 }
 
 /**

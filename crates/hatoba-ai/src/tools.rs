@@ -223,8 +223,9 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         tools.push(tool(
             SEND_INPUT,
             "Type text into the terminal tab's shell, the same way the keyboard does, then press \
-             `key` if given. The text is sent as it is, without a newline: to run a command, send \
-             its text with key \"enter\". Then wait until the output has been quiet for 1 second \
+             `keys` in order. The text is sent as it is, without a newline: to run a command, send \
+             its text with keys [\"enter\"]. Keys work in full-screen programs too: [\"ctrl+x\", \
+             \"n\"] leaves nano without saving. Then wait until the output has been quiet for 1 second \
              or wait_seconds has passed (default 10, at most 120), and return the output that \
              appeared after the input, or the whole screen when a full-screen program is active. \
              The text goes to the shell itself, so commands use its working directory, \
@@ -236,12 +237,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "properties": {
                     "text": {
                         "type": "string",
-                        "description": "Text to type, sent as it is (may be empty to press only a key)."
+                        "description": "Text to type, sent as it is (may be empty to press only keys)."
                     },
-                    "key": {
-                        "type": "string",
-                        "enum": ["enter", "tab", "esc", "ctrl_c", "ctrl_d", "up", "down", "left", "right"],
-                        "description": "A key to press after the text."
+                    "keys": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Keys to press in order after the text. A key is one printable character, or a name: enter, tab, esc, up, down, left, right, home, end, page_up, page_down, insert, delete, backspace, space, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++)."
                     },
                     "wait_seconds": {
                         "type": "integer",
@@ -1867,12 +1868,14 @@ mod tests {
         assert!(workdir(ToolPlace::Ssh).contains("Windows server"));
         assert!(!workdir(ToolPlace::LocalWindows).contains("Windows server"));
         let send = &builtin_tools(&ALL)[2];
+        // Only `keys` is offered; the frontend still accepts the `key` of older calls.
+        assert!(send.input_schema["properties"]["key"].is_null());
+        assert_eq!(send.input_schema["properties"]["keys"]["type"], "array");
         assert_eq!(
-            send.input_schema["properties"]["key"]["enum"],
-            json!([
-                "enter", "tab", "esc", "ctrl_c", "ctrl_d", "up", "down", "left", "right"
-            ])
+            send.input_schema["properties"]["keys"]["items"]["type"],
+            "string"
         );
+        assert!(send.description.contains("press `keys` in order"));
         // The file tools (AI-38…40) say where a path starts, that they skip sudo, and their limits.
         let tools = builtin_tools(&ALL);
         let [read, edit, write] = [&tools[3], &tools[4], &tools[5]];

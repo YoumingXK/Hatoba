@@ -77,7 +77,7 @@ function flush(session: LiveSession): Promise<void> {
 }
 
 /**
- * AI-13: types `text` and an optional key through the keyboard's path, waits until the output has
+ * AI-13: types `text` and ordered keys through the keyboard's path, waits until the output has
  * been quiet for 1 s or `wait_seconds` passed, and returns the output that appeared after the input,
  * or the whole screen when a full-screen program is running. Resolves to null when `signal` aborts
  * (the turn was stopped; Rust stores a cancelled result). Stopping never sends anything to the
@@ -94,7 +94,7 @@ export async function sendInput(
   const parsed = parseSendInput(json);
   if (!parsed.ok) return { status: "error", content: `Invalid arguments: ${parsed.error}` };
   if (session.status !== "connected") return { status: "error", content: DISCONNECTED };
-  const { text, key, waitSeconds } = parsed.value;
+  const { text, keys, waitSeconds } = parsed.value;
 
   const capture = new OutputCapture();
   let lastOutput: number;
@@ -104,7 +104,7 @@ export async function sendInput(
   });
   let ending: "quiet" | "timeout" | "disconnected" = "quiet";
   try {
-    const data = text + (key ? keySequence(key, session.term.modes.applicationCursorKeysMode) : "");
+    const data = text + keys.map((key) => keySequence(key, session.term.modes.applicationCursorKeysMode)).join("");
     const untype = onType();
     try {
       await session.sendInput(data);

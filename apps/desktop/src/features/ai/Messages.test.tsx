@@ -141,6 +141,9 @@ describe("Auto mode on calls (AI-47)", () => {
     expect(render(waiting({ id: "call_1", state: "approval", auto: { rule: { kind: "after_reject" } } }))).toContain(
       "You rejected an earlier call in this reply, so Auto asks about the rest of it.",
     );
+    expect(render(waiting({ id: "call_1", state: "approval", auto: { rule: { kind: "editing_submission" } } }))).toContain(
+      "Auto always asks when the input edits the terminal’s line and then submits it.",
+    );
     const unavailable = render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", [], "unavailable") } }));
     expect(unavailable).toContain("Auto could not judge this call: no judge is available. Choose one in Settings → AI.");
     expect(unavailable).toContain("Open Settings → AI");
@@ -169,6 +172,163 @@ describe("a command's folder on the approval card (AI-17)", () => {
     act(() => [...host.querySelectorAll("button")].find((b) => b.textContent === "Edit")?.click());
     const input = host.querySelector<HTMLInputElement>("input[placeholder='Home folder']");
     expect(input?.value).toBe("/srv/app");
+  });
+});
+
+describe("terminal key approval (AI-13)", () => {
+  const waiting = (args: Record<string, unknown>): Slot => ({
+    ...slot([user, { ...(reply("tool_calls") as Extract<AiEntryView, { role: "assistant" }>), tool_calls: [{ id: "keys_1", name: "send_input", arguments: JSON.stringify(args) }] }]),
+    turn: { ...newTurn(), phase: "tools", calls: [{ id: "keys_1", state: "approval" }] },
+  });
+  const click = (host: HTMLElement, text: string) => act(() => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text)?.click());
+  const input = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+    const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    act(() => {
+      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const shown = (host: HTMLElement) => [...host.querySelectorAll("kbd")].map((e) => e.textContent);
+  const chips = (host: HTMLElement) => [...host.querySelectorAll("[data-key]")].map((e) => e.textContent);
+  const field = (host: HTMLElement) => host.querySelector<HTMLInputElement>("input[list]")!;
+  const press = (host: HTMLElement, key: string) => act(() => {
+    field(host).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+  const type = (host: HTMLElement, text: string) => {
+    input(field(host), text);
+    press(host, "Enter");
+  };
+  const remove = (host: HTMLElement, label: string) => act(() => {
+    const button = host.querySelector<HTMLButtonElement>(`button[aria-label="Remove key ${label}"]`);
+    expect(button, label).not.toBeNull();
+    button!.click();
+  });
+  /** Runs the card and returns the arguments it ran with, or null when Run did nothing. */
+  const runWith = async (host: HTMLElement) => {
+    const actions = await import("./actions");
+    const decide = vi.spyOn(actions, "decideCall").mockImplementation(() => {});
+    try {
+      click(host, "Run");
+      if (!decide.mock.calls.length) return null;
+      const decision = decide.mock.calls[0][1];
+      if (decision.kind !== "run") throw new Error("expected Run");
+      return JSON.parse(decision.edited!) as Record<string, unknown>;
+    } finally {
+      decide.mockRestore();
+    }
+  };
+
+  it("shows the controls in the text and every key, and keeps the text's bytes when only a key changes", async () => {
+    const text = "\x18\x1b\\x18^X";
+    const host = mount(waiting({ text, key: "ctrl_c", keys: ["ctrl+x", "n"] }));
+    expect(host.textContent).toContain("⟦^X⟧⟦Esc⟧");
+    expect(shown(host)).toEqual(["Ctrl+C", "Ctrl+X", "n"]);
+    expect(host.textContent).toContain("Then press Ctrl+C Ctrl+X n · Waits up to 10 s for output");
+    click(host, "Edit");
+    expect(host.querySelector("textarea")?.value).toBe("⟦^X⟧⟦Esc⟧\\x18^X");
+    expect(host.textContent).toContain("Control characters show as ⟦^X⟧, ⟦Esc⟧ and so on.");
+    expect(chips(host)).toEqual(["Ctrl+C", "Ctrl+X", "n"]);
+    remove(host, "Ctrl+X");
+    type(host, "ctrl+o");
+    expect(await runWith(host)).toEqual({ text, keys: ["ctrl_c", "ctrl+o", "n"] });
+  });
+
+  it.each(["cd C:\\temp", "grep '^Error' log"])("sends %s exactly as typed in the editor", async (text) => {
+    const host = mount(waiting({ text: "ls", key: "enter" }));
+    click(host, "Edit");
+    input(host.querySelector("textarea")!, text);
+    expect((await runWith(host))?.text).toBe(text);
+  });
+
+  it("names a space Space, in the view and in Edit", () => {
+    const host = mount(waiting({ keys: [" ", "space", "alt+space"] }));
+    expect(shown(host)).toEqual(["Space", "Space", "Alt+Space"]);
+    click(host, "Edit");
+    expect(chips(host)).toEqual(["Space", "Space", "Alt+Space"]);
+  });
+
+  it("shows Right as a key of its own, with nothing between the keys that reads as one", () => {
+    const host = mount(waiting({ keys: ["up", "right", "enter"] }));
+    expect(shown(host)).toEqual(["↑", "→", "Enter"]);
+    expect(host.textContent?.match(/→/g)).toHaveLength(1);
+  });
+
+  it("names keys as keyboards print them", () => {
+    const host = mount(waiting({ keys: ["ctrl+x", "alt+f", "alt+F", "shift+tab", "f10", "page_down", "ctrl+["] }));
+    expect(shown(host)).toEqual(["Ctrl+X", "Alt+f", "Alt+F", "Shift+Tab", "F10", "Page Down", "Ctrl+["]);
+  });
+
+  it("adds keys where the caret is and removes any key, keeping focus in the field", async () => {
+    const host = mount(waiting({ keys: ["ctrl+x", "n"] }));
+    click(host, "Edit");
+    remove(host, "Ctrl+X");
+    expect(document.activeElement).toBe(field(host));
+    type(host, "Esc");
+    type(host, " ");
+    expect(chips(host)).toEqual(["Esc", "Space", "n"]);
+    expect(document.activeElement).toBe(field(host));
+    press(host, "End");
+    type(host, "enter");
+    press(host, "Home");
+    type(host, "tab");
+    expect(chips(host)).toEqual(["Tab", "Esc", "Space", "n", "Enter"]);
+    // ← and → move the caret over the keys, Backspace and Delete remove the key on either side.
+    press(host, "ArrowRight");
+    press(host, "Delete");
+    press(host, "ArrowLeft");
+    press(host, "Backspace");
+    press(host, "ArrowRight");
+    press(host, "ArrowRight");
+    press(host, "Backspace");
+    expect(chips(host)).toEqual(["Esc", "Enter"]);
+    expect(await runWith(host)).toEqual({ text: "", keys: ["esc", "enter"] });
+  });
+
+  it("adds what was typed when the field loses focus, and Esc drops it without leaving Edit", async () => {
+    const host = mount(waiting({ text: "ls", keys: ["enter"] }));
+    click(host, "Edit");
+    act(() => field(host).focus());
+    input(field(host), "q");
+    press(host, "Escape");
+    expect(field(host).value).toBe("");
+    expect(host.querySelector("textarea")).not.toBeNull();
+    expect(document.activeElement).toBe(field(host));
+    press(host, "Home");
+    input(field(host), "ctrl+u");
+    act(() => field(host).blur());
+    expect(chips(host)).toEqual(["Ctrl+U", "Enter"]);
+    expect(await runWith(host)).toEqual({ text: "ls", keys: ["ctrl+u", "enter"] });
+  });
+
+  it("marks a key Hatoba can't press on its own chip, and Run waits until it is removed", async () => {
+    const host = mount(waiting({ keys: ["ctrl+x", "pagedown"] }));
+    click(host, "Edit");
+    const bad = () => [...host.querySelectorAll("[data-key]")].filter((e) => e.className.includes("keyChipBad")).map((e) => e.textContent);
+    expect(bad()).toEqual(["pagedown"]);
+    expect(host.textContent).toContain("Keys must be single characters or names such as enter, ctrl+x, alt+f or page_down.");
+    type(host, "ctrl+");
+    expect(bad()).toEqual(["pagedown", "ctrl+"]);
+    expect(await runWith(host)).toBeNull();
+    remove(host, "pagedown");
+    remove(host, "ctrl+");
+    expect(host.textContent).not.toContain("Keys must be");
+    expect(await runWith(host)).toEqual({ text: "", keys: ["ctrl+x"] });
+  });
+
+  it("shows the control hint only while the edited text has a marker", () => {
+    const host = mount(waiting({ text: "ls", keys: ["enter"] }));
+    click(host, "Edit");
+    expect(host.textContent).not.toContain("Control characters show");
+    input(host.querySelector("textarea")!, "⟦Esc⟧");
+    expect(host.textContent).toContain("Control characters show");
+    input(host.querySelector("textarea")!, "ls");
+    expect(host.textContent).not.toContain("Control characters show");
+  });
+
+  it("does not explain literal marker text as a control", () => {
+    const host = mount(waiting({ text: "literal ⟦Esc⟧", keys: ["enter"] }));
+    click(host, "Edit");
+    expect(host.textContent).not.toContain("Control characters show");
   });
 });
 
