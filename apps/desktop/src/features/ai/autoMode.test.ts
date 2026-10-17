@@ -25,6 +25,11 @@ const ipc = vi.hoisted(() => ({
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   allowances: vi.fn<() => Promise<AiAllowance[]>>(),
   settings: vi.fn<() => Promise<AiSettingsView>>(),
+  terminal: vi.fn<typeof import("./terminalTools").sendInput>(),
+}));
+vi.mock("./terminalTools", async (importActual) => ({
+  ...(await importActual<typeof import("./terminalTools")>()),
+  sendInput: ipc.terminal,
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -197,6 +202,7 @@ beforeEach(() => {
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.allowances.mockReset().mockResolvedValue([]);
   ipc.settings.mockReset().mockResolvedValue(settings());
+  ipc.terminal.mockReset().mockResolvedValue({ status: "ok", content: "ok" });
   screen.rows = ["$ "];
   useTabs.setState({ tabs: [tab] });
   useAi.setState({
@@ -298,6 +304,37 @@ describe("a turn in Auto mode (AI-47)", () => {
     decideCall(TAB, { kind: "reject", reason: "" });
     await until(() => ipc.result.mock.calls.length === 1);
     expect(ipc.result.mock.calls[0][2]).toMatchObject({ status: "rejected", judged: false });
+  });
+
+  it("requires approval for terminal editing keys even when the judge would allow the call", async () => {
+    ipc.judge.mockResolvedValue(verdict("run"));
+    await respond("auto", [call("call_1", "send_input", { text: "shx", keys: ["backspace", ...Array.from("utdown"), "enter"] })]);
+    await until(() => current()?.state === "approval");
+    expect(current()?.auto).toEqual({ rule: { kind: "editing_submission" } });
+    expect(ipc.judge).not.toHaveBeenCalled();
+    expect(ipc.run).not.toHaveBeenCalled();
+    expect(ipc.terminal).not.toHaveBeenCalled();
+  });
+
+  it.each([["ctrl+x", "n"], ["f10"], ["ctrl_c"], ["esc"], ["tab"], ["up"]])("lets the judge decide non-submitting keys %j", async (...keys) => {
+    ipc.judge.mockResolvedValue(verdict("ask"));
+    await respond("auto", [call("call_1", "send_input", { keys })]);
+    await until(() => current()?.state === "approval");
+    expect(ipc.judge).toHaveBeenCalledOnce();
+  });
+
+  it("reads the updated screen before submitting a line recalled by an earlier call", async () => {
+    ipc.judge.mockResolvedValue(verdict("run"));
+    ipc.terminal.mockImplementation(async () => {
+      screen.rows = ["$ sudo reboot"];
+      return { status: "ok", content: "ok" };
+    });
+    await respond("auto", [call("call_1", "send_input", { keys: ["up"] }), call("call_2", "send_input", { keys: ["enter"] })]);
+    await until(() => current()?.id === "call_2" && current()?.state === "approval");
+    expect(current()?.auto).toEqual({ rule: { kind: "command", command: "reboot" } });
+    expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1"]);
+    expect(ipc.terminal).toHaveBeenCalledOnce();
+    expect(JSON.parse(ipc.terminal.mock.calls[0][1])).toEqual({ keys: ["up"] });
   });
 
   it("asks without the judge while the screen asks for a password, and gives the judge the screen otherwise", async () => {

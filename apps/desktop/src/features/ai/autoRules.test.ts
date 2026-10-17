@@ -189,6 +189,76 @@ describe("the commands Auto always asks about in PowerShell and Command Prompt (
 });
 
 describe("a line send_input submits (AI-47)", () => {
+  it("asks before Backspace can turn harmless text into a destructive command", () => {
+    const args = { text: "shx", keys: ["backspace", ...Array.from("utdown"), "enter"] };
+    expect(hardRule({ kind: "send_input", args, screen: "$ " })).toEqual({ kind: "editing_submission" });
+  });
+
+  it.each(["enter", "ctrl+m", "ctrl+j", "ctrl+o"])("checks the cursor's line when %s submits anywhere in keys", (key) => {
+    for (const args of [{ key }, { keys: [key] }, { keys: [key, "n"] }, { text: "down", keys: [key, "n"] }]) {
+      const cursor = args.text ? "$ shut" : "$ shutdown";
+      expect(hardRule({ kind: "send_input", args, screen: cursor })).toEqual({ kind: "command", command: "shutdown" });
+      expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls\u200b" })).toEqual({ kind: "hidden" });
+    }
+  });
+
+  it("reads printable keys with text in order, even without a submission", () => {
+    for (const args of [
+      { keys: Array.from("rm -rf /") },
+      { text: "r", keys: Array.from("m -rf /") },
+      { text: "r", key: "m", keys: Array.from(" -rf /") },
+    ]) expect(hardRule({ kind: "send_input", args })).toEqual({ kind: "command", command: "rm -r" });
+    expect(hardRule({ kind: "send_input", args: { text: "ls ", keys: Array.from("/tmp") } })).toBeNull();
+    expect(hardRule({ kind: "send_input", args: { keys: ["shift+a", "space", "é", "界"] } })).toBeNull();
+  });
+
+  it.each(["posix", "powershell", "cmd"] as const)("asks only when editing precedes submission on a %s command line", (dialect) => {
+    for (const key of ["backspace", "delete", "left", "right", "up", "down", "home", "end", "tab", "shift+tab", "esc", "f10", "ctrl+i", "ctrl+a", "ctrl+k", "ctrl+u", "ctrl+w", "ctrl+r", "ctrl+x", "ctrl_c", "ctrl_d", "alt+f", "alt+ctrl+o"]) {
+      for (const args of [{ key }, { keys: [key] }, { keys: ["enter", key] }]) {
+        expect(hardRule({ kind: "send_input", dialect, args }), key).toBeNull();
+        expect(hardRule({ kind: "send_input", dialect, args, screen: "$ ls" }), key).toBeNull();
+      }
+      for (const submit of ["enter", "ctrl+m", "ctrl+j", "ctrl+o"]) {
+        for (const args of [{ key, keys: [submit] }, { text: "shx", keys: [key, ...Array.from("utdown"), submit] }]) {
+          expect(hardRule({ kind: "send_input", dialect, args }), key).toEqual({ kind: "editing_submission" });
+        }
+      }
+    }
+  });
+
+  it.each(["alt+enter", "alt+ctrl+m", "alt+ctrl+j"])("asks about %s instead of treating it as a plain submission", (key) => {
+    expect(hardRule({ kind: "send_input", args: { keys: [key] }, screen: "$ ls" })).toEqual({ kind: "editing_submission" });
+  });
+
+  it("asks before a tab in text can complete a command", () => {
+    expect(hardRule({ kind: "send_input", args: { text: "sudo shut\t\n" } })).toEqual({ kind: "editing_submission" });
+    expect(hardRule({ kind: "send_input", args: { text: "ls\t" } })).toBeNull();
+    expect(hardRule({ kind: "send_input", args: { text: "ls\n\t" } })).toBeNull();
+    expect(hardRule({ kind: "send_input", args: { text: "ls\t", keys: ["enter"] } })).toEqual({ kind: "editing_submission" });
+  });
+
+  it("keeps printable commands in the check when an editing key follows them", () => {
+    expect(hardRule({ kind: "send_input", args: { keys: [...Array.from("rm -rf /"), "home"] } })).toEqual({ kind: "command", command: "rm -r" });
+    expect(hardRule({ kind: "send_input", args: { keys: ["ctrl+x", "n"] }, screen: "nano" })).toBeNull();
+    expect(hardRule({ kind: "send_input", args: { keys: ["f10"] }, screen: "htop" })).toBeNull();
+  });
+
+  it("checks history recalled by an earlier call when the next call submits it", () => {
+    expect(hardRule({ kind: "send_input", args: { keys: ["up"] }, screen: "$ " })).toBeNull();
+    expect(hardRule({ kind: "send_input", args: { keys: ["enter"] }, screen: "$ sudo reboot" })).toEqual({ kind: "command", command: "reboot" });
+  });
+
+  it.each(["powershell", "cmd"] as const)("keeps ordered keys under the %s hard rules", (dialect) => {
+    expect(hardRule({ kind: "send_input", dialect, args: { keys: Array.from("rd /s old") } })).toEqual({ kind: "command", command: "rd /s" });
+    expect(hardRule({ kind: "send_input", dialect, args: { keys: ["enter", "n"] }, screen: "C:\\> Stop-Computer" })).toEqual({ kind: "command", command: "Stop-Computer" });
+  });
+
+  it("checks printable keys and Ctrl+M/Enter sequences against the cursor's line", () => {
+    for (const args of [{ keys: ["m", "space", "-", "r", "enter"] }, { text: "m -r", keys: ["ctrl+m"] }, { text: "m -r", key: "CTRL_M" }]) {
+      expect(hardRule({ kind: "send_input", args, screen: "$ r" })).toEqual({ kind: "command", command: "rm -r" });
+    }
+    expect(hardRule({ kind: "send_input", args: { keys: ["r", "m", "space", "-", "r", "enter"] } })).toEqual({ kind: "command", command: "rm -r" });
+  });
   const typed = (cursor: string, args: Record<string, unknown>) => hardRule({ kind: "send_input", args, screen: `$ uptime\n 10:02:11 up 3 days\n${cursor}` });
 
   it("checks the cursor's line with the text, so that a command split across calls asks", () => {

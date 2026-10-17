@@ -2,6 +2,9 @@ import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, AiSettingsView, McpToolInfo } from "@/ipc/types";
 import type { CallLimit } from "./batches";
 import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes, type ShellDialect } from "./commandRules";
+import { parseSendKey, SEND_KEY_NOTATION, showTerminalInput, type SendKey } from "./sendKeys";
+export { SEND_KEYS, keySequence, parseSendKey } from "./sendKeys";
+export type { SendKey } from "./sendKeys";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -432,60 +435,40 @@ export function parseReadTerminal(json: string): Parsed<ReadTerminalArgs> {
   return { ok: true, value: { lines } };
 }
 
-export const SEND_KEYS = ["enter", "tab", "esc", "ctrl_c", "ctrl_d", "up", "down", "left", "right"] as const;
-export type SendKey = (typeof SEND_KEYS)[number];
-
 export const SEND_INPUT_DEFAULT_WAIT = 10;
 export const SEND_INPUT_MAX_WAIT = 120;
 
 export interface SendInputArgs {
   text: string;
-  key: SendKey | null;
+  keys: SendKey[];
   /** How long to wait for the output to go quiet, in seconds. */
   waitSeconds: number;
 }
 
-/** AI-13: `{ text: string, key?: SendKey, wait_seconds?: integer }`, waiting 10 s by default and at most 120 s. */
+/** AI-13: text followed by ordered keys, or the legacy single key, waiting 10 s by default. */
 export function parseSendInput(json: string): Parsed<SendInputArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
   if (args.text !== undefined && args.text !== null && typeof args.text !== "string") return { ok: false, error: '"text" must be a string.' };
   const text = typeof args.text === "string" ? args.text : "";
-  let key: SendKey | null = null;
+  const keys: SendKey[] = [];
   if (args.key !== undefined && args.key !== null && args.key !== "") {
-    const k = typeof args.key === "string" ? args.key.toLowerCase() : "";
-    if (!(SEND_KEYS as readonly string[]).includes(k)) return { ok: false, error: `"key" must be one of ${SEND_KEYS.join(", ")}.` };
-    key = k as SendKey;
+    const key = parseSendKey(args.key);
+    if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(args.key)}. A key is ${SEND_KEY_NOTATION}.` };
+    keys.push(key);
   }
-  if (!text && !key) return { ok: false, error: 'Nothing to send: give "text", "key", or both.' };
+  if (args.keys !== undefined && args.keys !== null) {
+    if (!Array.isArray(args.keys)) return { ok: false, error: '"keys" must be an array.' };
+    for (const value of args.keys) {
+      const key = parseSendKey(value);
+      if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(value)}. A key is ${SEND_KEY_NOTATION}.` };
+      keys.push(key);
+    }
+  }
+  if (!text && !keys.length) return { ok: false, error: 'Nothing to send: give "text", "keys", or both.' };
   const waitSeconds = intArg(args.wait_seconds, SEND_INPUT_DEFAULT_WAIT, 1, SEND_INPUT_MAX_WAIT);
   if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
-  return { ok: true, value: { text, key, waitSeconds } };
-}
-
-/** The bytes a key sends. Arrow keys follow the application cursor mode (DECCKM) like xterm does. */
-export function keySequence(key: SendKey, applicationCursor: boolean): string {
-  const arrow = (c: string) => (applicationCursor ? `\x1bO${c}` : `\x1b[${c}`);
-  switch (key) {
-    case "enter":
-      return "\r";
-    case "tab":
-      return "\t";
-    case "esc":
-      return "\x1b";
-    case "ctrl_c":
-      return "\x03";
-    case "ctrl_d":
-      return "\x04";
-    case "up":
-      return arrow("A");
-    case "down":
-      return arrow("B");
-    case "right":
-      return arrow("C");
-    case "left":
-      return arrow("D");
-  }
+  return { ok: true, value: { text, keys, waitSeconds } };
 }
 
 // ───────────── display ─────────────
@@ -498,7 +481,7 @@ export function callSummary(name: string, json: string): string {
     case "run_command":
       return firstLine(str(args.command));
     case "send_input":
-      return [str(args.text).replace(/\r?\n/g, "⏎"), args.key ? `[${str(args.key)}]` : ""].filter(Boolean).join(" ");
+      return [showTerminalInput(str(args.text)).replace(/\n/g, "⏎"), ...[args.key, ...(Array.isArray(args.keys) ? args.keys : [])].filter(Boolean).map((k) => `[${str(k)}]`)].filter(Boolean).join(" ");
     case "web_search":
       return str(args.query);
     case "fetch_url":

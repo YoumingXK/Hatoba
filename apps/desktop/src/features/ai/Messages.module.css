@@ -698,6 +698,103 @@
   color: var(--fg2);
 }
 
+/* AI-13: the keys a `send_input` call presses, as chips in the line under its text. */
+.key {
+  margin-block: 1px;
+  font-family: var(--font-mono);
+}
+
+/* AI-13: the keys in Edit, as chips in one field that wraps, like a host’s tags (TagInput). Its label
+   stays level with the first row. */
+.keysRow {
+  align-items: flex-start;
+}
+
+.keysRow > label {
+  line-height: var(--field-height);
+}
+
+.keysField {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: var(--field-height);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: var(--radius-md);
+  background: var(--field);
+  box-shadow: 0 0 0 0.5px var(--fieldline);
+  cursor: text;
+}
+
+.keysField:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.keyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 5px 0 7px;
+  border-radius: var(--radius-sm);
+  background: var(--fill2);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.keyChip button {
+  border: 0;
+  padding: 0;
+  background: none;
+  display: inline-flex;
+  color: var(--fg2);
+  font-size: 10px;
+}
+
+/* A key Hatoba can’t press. */
+.keyChipBad {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.keyChipBad button {
+  color: inherit;
+}
+
+.keysInput {
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 20px;
+  border: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.keysInput:focus-visible {
+  outline: none;
+}
+
+.keysInput::placeholder {
+  color: var(--fg3);
+}
+
+/* Between two chips the caret takes no more room than what is typed there. */
+.keysInputInline {
+  flex: none;
+  min-width: 0;
+  width: auto;
+  padding: 0 1px;
+}
+
 .fieldError {
   font-size: var(--text-xs);
   color: var(--red);

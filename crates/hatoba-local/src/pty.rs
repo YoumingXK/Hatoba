@@ -380,4 +380,77 @@ mod tests {
         let (_, exited) = output_until(&mut events, "").await;
         assert!(exited.is_some());
     }
+
+    /// The AI and xterm send these same bytes. ReadKey checks ConPTY's decoded console events,
+    /// in PowerShell and in a console reader launched from Command Prompt.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_console_reads_function_and_alt_keys_from_xterm_sequences() {
+        use base64::Engine;
+
+        let script = "[Console]::WriteLine('hatoba-ready'); \
+            for ($i = 0; $i -lt 13; $i++) { \
+                $k = [Console]::ReadKey($true); \
+                [Console]::WriteLine(('hatoba-key:{0}:{1}' -f \
+                    $k.Key, [bool]($k.Modifiers -band [ConsoleModifiers]::Alt))) \
+            }; exit 0";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(
+            script
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>(),
+        );
+        let shells: Vec<_> = crate::shells::detect()
+            .into_iter()
+            .filter(|s| matches!(s.kind, ShellKind::PowerShell | ShellKind::Cmd))
+            .collect();
+        assert!(shells.iter().any(|s| s.kind == ShellKind::PowerShell));
+        assert!(shells.iter().any(|s| s.kind == ShellKind::Cmd));
+        for mut shell in shells {
+            shell.args = if shell.kind == ShellKind::Cmd {
+                vec![
+                    "/d".into(),
+                    "/c".into(),
+                    format!("powershell.exe -NoLogo -NoProfile -EncodedCommand {encoded}"),
+                ]
+            } else {
+                vec![
+                    "-NoLogo".into(),
+                    "-NoProfile".into(),
+                    "-EncodedCommand".into(),
+                    encoded.clone(),
+                ]
+            };
+            let (pty, mut events) = LocalPty::spawn(&shell, size(), &[], None).unwrap();
+            pty.write(b"\x1b[1;1R".to_vec()).unwrap();
+            let (text, exited) = output_until(&mut events, "hatoba-ready").await;
+            assert!(
+                exited.is_none() && text.contains("hatoba-ready"),
+                "{}: {text}",
+                shell.id
+            );
+            for (bytes, expected) in [
+                ("\x1bOP", "F1:False"),
+                ("\x1bOQ", "F2:False"),
+                ("\x1bOR", "F3:False"),
+                ("\x1bOS", "F4:False"),
+                ("\x1b[15~", "F5:False"),
+                ("\x1b[17~", "F6:False"),
+                ("\x1b[18~", "F7:False"),
+                ("\x1b[19~", "F8:False"),
+                ("\x1b[20~", "F9:False"),
+                ("\x1b[21~", "F10:False"),
+                ("\x1b[23~", "F11:False"),
+                ("\x1b[24~", "F12:False"),
+                ("\x1bf", "F:True"),
+            ] {
+                pty.write(bytes.as_bytes().to_vec()).unwrap();
+                let expected = format!("hatoba-key:{expected}");
+                let (text, _) = output_until(&mut events, &expected).await;
+                assert!(text.contains(&expected), "{}: {text}", shell.id);
+            }
+            let (_, exited) = output_until(&mut events, "").await;
+            assert_eq!(exited, Some(Some(0)), "{}", shell.id);
+        }
+    }
 }
