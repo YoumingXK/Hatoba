@@ -99,4 +99,4 @@ The `main` branch can be ahead of the latest release and of the user's version, 
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
