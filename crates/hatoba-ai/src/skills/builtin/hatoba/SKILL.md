@@ -17,7 +17,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - Tab bar (top, merged with the title bar). The first tab is the home tab. It shows the page chosen in the sidebar: the dashboard, the host list, the host editor, Keys or Cloud Sync. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs; a local terminal tab shows a terminal icon. Then **New Tab** (+), which goes to the host list and focuses the search box, **New Local Terminal** (the arrow after it), which lists this computer's shells, and the AI button (sparkle). Windows and Linux draw their buttons here; macOS uses its native ones.
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or its readout once it is on), **Find in terminal**, **Port Forwarding**, **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
-- Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
+- Settings. A window with the tabs General, Appearance, Terminal, Proxies, SSH Agent, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
 - System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock** and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
@@ -49,7 +49,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/ai-chatgpt.md` | Sign in with ChatGPT: **Continue with ChatGPT**, a ChatGPT provider's account and models, signing in on each device, Sign Out, usage limits and sign-in errors |
 | `references/ai-mcp.md` | MCP servers in Settings → AI: adding a Command or HTTP server, templates, Always ask, import and export, a server's state, tools and Always allow |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
-| `references/settings.md` | General, Appearance, Proxies, Security and About settings, language, checking for and installing updates, Report a Problem, and which settings sync |
+| `references/settings.md` | General, Appearance, Proxies, the SSH agent socket, Security and About settings, language, checking for and installing updates, Report a Problem, and which settings sync |
 | `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, proxy, …), jump hosts, proxies, host key prompts, keepalive and the disconnect banner, and how to read the diagnostics that **Ask AI** attaches |
 | `references/troubleshooting.md` | Key, master password, recovery, SFTP, update and other error messages |
 | `references/troubleshooting-sync.md` | Sync and Cloudflare errors and what to do |

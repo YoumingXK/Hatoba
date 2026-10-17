@@ -47,7 +47,15 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// agent it starts is the one `ssh-add` fills; Hatoba never adds keys, so it skips it.
 fn is_launchd_placeholder(path: &Path) -> bool {
     let path = path.to_string_lossy();
-    path.starts_with("/var/run/com.apple.launchd.") && path.ends_with("/Listeners")
+    // Where launchd puts the listener depends on how the process was started: a login session on
+    // this macOS answers `/var/run/com.apple.launchd.<id>/Listeners`, and a window started another
+    // way can be handed the same listener under `/private/tmp`. Both mean "no agent here".
+    [
+        "/var/run/com.apple.launchd.",
+        "/private/tmp/com.apple.launchd.",
+    ]
+    .iter()
+    .any(|prefix| path.starts_with(prefix) && path.ends_with("/Listeners"))
 }
 
 /// The agent behind a socket, so the settings page can name it.
@@ -413,6 +421,24 @@ mod tests {
         assert_eq!(sockets.len(), 1);
         assert_eq!(sockets[0].path, chosen);
         assert_eq!(sockets[0].kind, AgentKind::Bitwarden);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn both_launchd_listener_paths_are_the_placeholder() {
+        for path in [
+            // Measured on macOS 27 with `launchctl getenv SSH_AUTH_SOCK`.
+            "/var/run/com.apple.launchd.jy4KjsWd0t/Listeners",
+            "/private/tmp/com.apple.launchd.abc123/Listeners",
+        ] {
+            assert!(is_launchd_placeholder(Path::new(path)), "{path}");
+        }
+        assert!(!is_launchd_placeholder(Path::new(
+            "/Users/someone/.bitwarden-ssh-agent.sock"
+        )));
+        assert!(!is_launchd_placeholder(Path::new(
+            "/var/run/com.apple.launchd.x/Other"
+        )));
     }
 
     #[test]
